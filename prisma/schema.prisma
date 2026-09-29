@@ -1,0 +1,139 @@
+// ThreadCraft OS - Production Database Schema
+// Optimized for PostgreSQL, Supabase, Neon, or Railway
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlanTier {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum PostStatus {
+  IDEA
+  DRAFTING
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PlatformType {
+  THREADS
+  TWITTER
+  LINKEDIN
+  INSTAGRAM
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  image         String?
+  plan          PlanTier       @default(FREE)
+  stripeCustomerId String?     @unique
+  stripeSubscriptionId String? @unique
+  posts         Post[]
+  pillars       ContentPillar[]
+  scheduleSlots ScheduleSlot[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Post {
+  id             String          @id @default(cuid())
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  rawIdea        String          @db.Text
+  tone           String          @default("conversational")
+  status         PostStatus      @default(IDEA)
+  pillarId       String?
+  pillar         ContentPillar?  @relation(fields: [pillarId], references: [id], onDelete: SetNull)
+  drafts         PlatformDraft[]
+  hookAnalysis   HookAnalysis?
+  visualCard     VisualCard?
+  scheduledFor   DateTime?
+  publishedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([userId, status])
+  @@index([scheduledFor])
+}
+
+model PlatformDraft {
+  id             String        @id @default(cuid())
+  postId         String
+  post           Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform       PlatformType
+  content        String        @db.Text
+  characterCount Int           @default(0)
+  slideCount     Int           @default(1)
+  slidesData     Json?         // Array of carousel slides { number, title, body }
+  threadData     Json?         // Array of tweets { index, text }
+  isReady        Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([postId, platform])
+}
+
+model HookAnalysis {
+  id                String   @id @default(cuid())
+  postId            String   @unique
+  post              Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  originalHook      String   @db.Text
+  totalScore        Int      // 0 to 100
+  curiosityScore    Int      // 0 to 25
+  contrastScore     Int      // 0 to 25
+  rhythmScore       Int      // 0 to 25
+  specificityScore  Int      // 0 to 25
+  feedback          Json     // string[]
+  suggestions       Json     // { type: string, text: string, rationale: string }[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model VisualCard {
+  id           String   @id @default(cuid())
+  postId       String   @unique
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  theme        String   @default("obsidian")
+  authorName   String   @default("Creator")
+  authorHandle String   @default("@creator")
+  authorAvatar String?
+  showVerified Boolean  @default(true)
+  customBadge  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ContentPillar {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  color       String   @default("#6366f1")
+  description String?
+  posts       Post[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ScheduleSlot {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int          // 0 = Sunday, 6 = Saturday
+  timeString  String       // "08:30", "19:00", etc.
+  platform    PlatformType
+  isOptimal   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+}
